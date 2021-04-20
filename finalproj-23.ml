@@ -148,8 +148,6 @@ let rec rename_ex (n,x) e = (match e with
     
 let rec subst ((e', x) : exp * name) (e : exp) : exp =
   
-  let hstbl = Hashtbl.create 10 in
-  
   match e with
   | Var y ->
       if x = y then
@@ -197,7 +195,7 @@ let rec subst ((e', x) : exp * name) (e : exp) : exp =
                 in 
                 Let (Valtuple(subst (e',x) et, nl) :: g, he)
                   
-          | ByName(e1,n) -> if (n = x) then (print_string " In ";Format.printf " n is %s and x is %s \n" n x;e)
+          | ByName(e1,n) -> if (n = x) then (e)
                                          
               else
               if(member n (free_vars e')) then
@@ -321,12 +319,7 @@ let infer_tests : ((context * exp) * typ) list = [
 
 (* Q5  : Type an expression *)
 
-        
-            
-          
-            
-          
-
+  
 
 let unify_tests : ((typ * typ) * unit) list = [
 ]
@@ -374,18 +367,17 @@ let rec infer (ctx : context) (e : exp) : typ = match e with
   | Int(_) -> TInt
   | Bool(_) -> TBool
   | If(e,e1,e2) -> let t = infer ctx e1 in 
-      unify TBool (infer ctx e); unify t (infer ctx e2); t
-      (*if typ_eq TBool (infer ctx e) && typ_eq t (infer ctx e2) then
-         t
-       else
-         type_fail "Arguments of bad type provided for If"*)
-  | Primop(And, l) -> (List.iter (fun v -> unify TBool v (*typ_eq TInt v*)) (List.map (fun v -> infer ctx v) l));
+      (try unify TBool (infer ctx e) with TypeError(_) -> type_fail "The condition should have type bool"); 
+      (try unify t (infer ctx e2) with TypeError(_) -> type_fail "The else expression should have same type as if");
+      t
+ 
+  | Primop(And, l) -> (List.iter (fun v -> (try unify TBool v with TypeError(_) -> type_fail "Arguments should be of type bool")) (List.map (fun v -> infer ctx v) l));
       TBool
           
-  | Primop(Or, l) -> (List.iter (fun v -> unify TBool v (*typ_eq TInt v*)) (List.map (fun v -> infer ctx v) l)); 
+  | Primop(Or, l) -> (List.iter (fun v -> (try unify TBool v with TypeError(_) -> type_fail "Arguments should be of type bool")) (List.map (fun v -> infer ctx v) l)); 
       TBool
       
-  | Primop(op, l) -> if (List.iter (fun v -> unify TInt v (*typ_eq TInt v*)) (List.map (fun v -> infer ctx v) l)); List.mem op int_op  || op = Negate then
+  | Primop(op, l) -> if (List.iter (fun v -> (try unify TInt v with TypeError(_) -> type_fail "Arguments should be of type int")) (List.map (fun v -> infer ctx v) l)); List.mem op int_op  || op = Negate then
       
       
         TInt
@@ -395,10 +387,8 @@ let rec infer (ctx : context) (e : exp) : typ = match e with
         TBool
           
       else 
-      if (List.for_all (fun v -> typ_eq TBool v) (List.map (fun v -> infer ctx v) l)) && List.mem op b_op then
-        TBool
-      else
-        type_fail "Bad operator or wrong arguments provided"
+        
+        type_fail "Bad operator provided"
          
         
   | Tuple(l) -> TProduct (List.map (fun v -> infer ctx v) l )
@@ -408,7 +398,7 @@ let rec infer (ctx : context) (e : exp) : typ = match e with
           let t2 = infer (extend ctx (n,tv)) e in
           match !t1 with 
           | Some d -> TArrow(d,t2)
-          | None -> (*type_fail "Type could not be inferred"*) TArrow(tv, t2)
+          | None -> TArrow(tv, t2)
                       
     
     )
@@ -425,7 +415,8 @@ let rec infer (ctx : context) (e : exp) : typ = match e with
     ) (List.rev dc) ctx in
       (infer exc e)
   | Apply(e1,e2) -> (match infer ctx e1 with
-      | TArrow (t1,t2) -> unify  t1 (infer ctx e2 ); t2
+      | TArrow (t1,t2) -> (try unify t1 (infer ctx e2 ) with TypeError(_) -> type_fail "Wrong type of argument provided to function"); 
+          t2
             
       | _ -> type_fail "first argument must be a function")
     
